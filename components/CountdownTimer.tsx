@@ -1,0 +1,267 @@
+// components/CountdownTimer.tsx
+import React, { useCallback, useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Switch,
+  Platform,
+} from 'react-native';
+import { colors, spacing, radii, shadows } from '../utils/theme';
+import { formatMs } from '../utils/formatTime';
+import { useCountdown } from '../hooks/useCountdown';
+import { useTimerStore, SavedTimer } from '../store/timerStore';
+import { CircularProgress } from './CircularProgress';
+import { TimerForm } from './TimerForm';
+import { SavedTimersList } from './SavedTimersList';
+// import * as Haptics from 'expo-haptics'; // Uncomment after install
+// import { useKeepAwake } from 'expo-keep-awake'; // Uncomment after install
+
+export function CountdownTimer() {
+  const [formVisible, setFormVisible] = useState(false);
+  const [activeTimerId, setActiveTimerId] = useState<string | null>(null);
+
+  const seeThrough = useTimerStore((s) => s.seeThrough);
+  const toggleSeeThrough = useTimerStore((s) => s.toggleSeeThrough);
+  const showStartCount = useTimerStore((s) => s.showStartCount);
+  const toggleShowStartCount = useTimerStore((s) => s.toggleShowStartCount);
+  const addTimer = useTimerStore((s) => s.addTimer);
+  const incrementStartCount = useTimerStore((s) => s.incrementStartCount);
+
+  const onFinish = useCallback(() => {
+    // Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    // Could also trigger a sound here
+  }, []);
+
+  const countdown = useCountdown({ onFinish });
+  // useKeepAwake(); // Uncomment — keeps screen on during timer
+
+  const handleSelectTimer = (timer: SavedTimer) => {
+    countdown.configure(timer.durationMs);
+    setActiveTimerId(timer.id);
+  };
+
+  const handleStart = () => {
+    countdown.start();
+    if (activeTimerId) {
+      incrementStartCount(activeTimerId);
+    }
+  };
+
+  const handleSaveNew = (title: string, durationMs: number) => {
+    const id = addTimer(title, durationMs);
+    countdown.configure(durationMs);
+    setActiveTimerId(id);
+  };
+
+  const isActive = countdown.status === 'running' || countdown.status === 'paused';
+  const isFinished = countdown.status === 'finished';
+  const ringColor = isFinished ? colors.ringComplete : colors.ringActive;
+
+  const containerOpacity = seeThrough && isActive ? 0.6 : 1;
+
+  return (
+    <View style={[styles.container, { opacity: containerOpacity }]}>
+      {/* ── Saved Timers ────────────────────────────────────── */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Saved Timers</Text>
+          <TouchableOpacity onPress={() => setFormVisible(true)}>
+            <Text style={styles.addBtn}>+ New</Text>
+          </TouchableOpacity>
+        </View>
+        <SavedTimersList onSelectTimer={handleSelectTimer} />
+      </View>
+
+      {/* ── Timer Display ───────────────────────────────────── */}
+      <View style={styles.timerArea}>
+        <CircularProgress
+          size={260}
+          strokeWidth={8}
+          progress={isFinished ? 1 : countdown.progress}
+          color={ringColor}
+        >
+          <Text style={styles.time}>
+            {formatMs(countdown.remainingMs)}
+          </Text>
+          {isFinished && <Text style={styles.doneLabel}>Done!</Text>}
+        </CircularProgress>
+      </View>
+
+      {/* ── Controls ────────────────────────────────────────── */}
+      <View style={styles.controls}>
+        {countdown.status === 'idle' && countdown.totalMs > 0 && (
+          <TouchableOpacity style={styles.btnPrimary} onPress={handleStart}>
+            <Text style={styles.btnPrimaryText}>Start</Text>
+          </TouchableOpacity>
+        )}
+
+        {countdown.status === 'running' && (
+          <TouchableOpacity style={styles.btnSecondary} onPress={countdown.pause}>
+            <Text style={styles.btnSecondaryText}>Pause</Text>
+          </TouchableOpacity>
+        )}
+
+        {countdown.status === 'paused' && (
+          <View style={styles.controlRow}>
+            <TouchableOpacity style={styles.btnSecondary} onPress={countdown.reset}>
+              <Text style={styles.btnSecondaryText}>Reset</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.btnPrimary} onPress={handleStart}>
+              <Text style={styles.btnPrimaryText}>Resume</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {isFinished && (
+          <View style={styles.controlRow}>
+            <TouchableOpacity style={styles.btnSecondary} onPress={countdown.reset}>
+              <Text style={styles.btnSecondaryText}>Reset</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.btnPrimary} onPress={handleStart}>
+              <Text style={styles.btnPrimaryText}>Restart</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {countdown.totalMs === 0 && (
+          <Text style={styles.hint}>
+            Select a saved timer or create a new one
+          </Text>
+        )}
+      </View>
+
+      {/* ── Options ─────────────────────────────────────────── */}
+      <View style={styles.options}>
+        <View style={styles.optionRow}>
+          <Text style={styles.optionLabel}>See-through mode</Text>
+          <Switch
+            value={seeThrough}
+            onValueChange={toggleSeeThrough}
+            trackColor={{ false: colors.surface, true: colors.accentDim }}
+            thumbColor={seeThrough ? colors.accent : colors.textDim}
+          />
+        </View>
+        <View style={styles.optionRow}>
+          <Text style={styles.optionLabel}>Show start counter</Text>
+          <Switch
+            value={showStartCount}
+            onValueChange={toggleShowStartCount}
+            trackColor={{ false: colors.surface, true: colors.secondaryDim }}
+            thumbColor={showStartCount ? colors.secondary : colors.textDim}
+          />
+        </View>
+      </View>
+
+      {/* ── Timer Form Modal ────────────────────────────────── */}
+      <TimerForm
+        visible={formVisible}
+        onClose={() => setFormVisible(false)}
+        onSave={handleSaveNew}
+      />
+    </View>
+  );
+}
+
+// ── Styles ────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  section: {
+    marginBottom: spacing.md,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  sectionTitle: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  addBtn: {
+    color: colors.accent,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  timerArea: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xl,
+  },
+  time: {
+    color: colors.textPrimary,
+    fontSize: 48,
+    fontWeight: '200',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: 2,
+  },
+  doneLabel: {
+    color: colors.success,
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: spacing.xs,
+  },
+  controls: {
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  controlRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  btnPrimary: {
+    backgroundColor: colors.accent,
+    paddingHorizontal: spacing.xl + 8,
+    paddingVertical: spacing.sm + 6,
+    borderRadius: radii.full,
+    ...shadows.glow,
+  },
+  btnPrimaryText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  btnSecondary: {
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm + 6,
+    borderRadius: radii.full,
+  },
+  btnSecondaryText: {
+    color: colors.textSecondary,
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  hint: {
+    color: colors.textDim,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  options: {
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.bgCard,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+  },
+  optionLabel: {
+    color: colors.textSecondary,
+    fontSize: 15,
+  },
+});
