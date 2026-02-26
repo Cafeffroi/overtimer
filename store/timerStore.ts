@@ -1,15 +1,24 @@
 // store/timerStore.ts
-import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// Drop-in replacement for Zustand using React Context + AsyncStorage.
+// All components keep using useTimerStore() exactly the same way.
+
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // ── Types ───────────────────────────────────────────────────────
 
 export interface SavedTimer {
   id: string;
   title: string;
-  durationMs: number; // total duration in ms
-  startCount: number; // number of times this timer was started
+  durationMs: number;
+  startCount: number;
   createdAt: string;
   lastUsedAt: string | null;
 }
@@ -22,117 +31,199 @@ export interface ChronometerSession {
 }
 
 interface TimerState {
-  // Saved timer presets
   savedTimers: SavedTimer[];
+  chronometerHistory: ChronometerSession[];
+  seeThrough: boolean;
+  showStartCount: boolean;
+}
+
+interface TimerActions {
   addTimer: (title: string, durationMs: number) => string;
   removeTimer: (id: string) => void;
-  updateTimer: (id: string, updates: Partial<Pick<SavedTimer, 'title' | 'durationMs'>>) => void;
+  updateTimer: (
+    id: string,
+    updates: Partial<Pick<SavedTimer, "title" | "durationMs">>,
+  ) => void;
   incrementStartCount: (id: string) => void;
   resetStartCount: (id: string) => void;
-
-  // Chronometer history (last 10)
-  chronometerHistory: ChronometerSession[];
   addChronometerSession: (durationMs: number, startedAt: string) => void;
   clearChronometerHistory: () => void;
-
-  // Preferences
-  seeThrough: boolean;
   toggleSeeThrough: () => void;
-  showStartCount: boolean;
   toggleShowStartCount: () => void;
 }
 
-// ── Helper ──────────────────────────────────────────────────────
+type TimerStore = TimerState & TimerActions;
+
+// ── Helpers ─────────────────────────────────────────────────────
 
 const generateId = (): string =>
   Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
 
-// ── Store ───────────────────────────────────────────────────────
+const STORAGE_KEY = "float-timer-storage";
 
-export const useTimerStore = create<TimerState>()(
-  persist(
-    (set, get) => ({
-      // ── Saved Timers ──────────────────────────────────────
+const defaultState: TimerState = {
+  savedTimers: [],
+  chronometerHistory: [],
+  seeThrough: false,
+  showStartCount: true,
+};
 
-      savedTimers: [],
+// ── Context ─────────────────────────────────────────────────────
 
-      addTimer: (title, durationMs) => {
-        const id = generateId();
-        set((state) => ({
-          savedTimers: [
-            ...state.savedTimers,
-            {
-              id,
-              title,
-              durationMs,
-              startCount: 0,
-              createdAt: new Date().toISOString(),
-              lastUsedAt: null,
-            },
-          ],
-        }));
-        return id;
-      },
+const TimerContext = createContext<TimerStore | null>(null);
 
-      removeTimer: (id) =>
-        set((state) => ({
-          savedTimers: state.savedTimers.filter((t) => t.id !== id),
-        })),
+// ── Provider ────────────────────────────────────────────────────
 
-      updateTimer: (id, updates) =>
-        set((state) => ({
-          savedTimers: state.savedTimers.map((t) =>
-            t.id === id ? { ...t, ...updates } : t
-          ),
-        })),
+export function TimerProvider({ children }: { children: React.ReactNode }) {
+  const [state, setState] = useState<TimerState>(defaultState);
+  const [loaded, setLoaded] = useState(false);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
-      incrementStartCount: (id) =>
-        set((state) => ({
-          savedTimers: state.savedTimers.map((t) =>
-            t.id === id
-              ? { ...t, startCount: t.startCount + 1, lastUsedAt: new Date().toISOString() }
-              : t
-          ),
-        })),
+  // Load from AsyncStorage on mount
+  useEffect(() => {
+    AsyncStorage.getItem(STORAGE_KEY).then((raw) => {
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          setState((prev) => ({ ...prev, ...parsed }));
+        } catch {}
+      }
+      setLoaded(true);
+    });
+  }, []);
 
-      resetStartCount: (id) =>
-        set((state) => ({
-          savedTimers: state.savedTimers.map((t) =>
-            t.id === id ? { ...t, startCount: 0 } : t
-          ),
-        })),
-
-      // ── Chronometer History ───────────────────────────────
-
-      chronometerHistory: [],
-
-      addChronometerSession: (durationMs, startedAt) =>
-        set((state) => ({
-          chronometerHistory: [
-            {
-              id: generateId(),
-              durationMs,
-              startedAt,
-              endedAt: new Date().toISOString(),
-            },
-            ...state.chronometerHistory,
-          ].slice(0, 10), // Keep only last 10
-        })),
-
-      clearChronometerHistory: () => set({ chronometerHistory: [] }),
-
-      // ── Preferences ───────────────────────────────────────
-
-      seeThrough: false,
-      toggleSeeThrough: () => set((state) => ({ seeThrough: !state.seeThrough })),
-
-      showStartCount: true,
-      toggleShowStartCount: () =>
-        set((state) => ({ showStartCount: !state.showStartCount })),
-    }),
-    {
-      name: 'float-timer-storage',
-      storage: createJSONStorage(() => AsyncStorage),
+  // Persist to AsyncStorage on change
+  useEffect(() => {
+    if (loaded) {
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => {});
     }
-  )
-);
+  }, [state, loaded]);
+
+  // ── Actions ─────────────────────────────────────────────────
+
+  const addTimer = useCallback((title: string, durationMs: number): string => {
+    const id = generateId();
+    setState((s) => ({
+      ...s,
+      savedTimers: [
+        ...s.savedTimers,
+        {
+          id,
+          title,
+          durationMs,
+          startCount: 0,
+          createdAt: new Date().toISOString(),
+          lastUsedAt: null,
+        },
+      ],
+    }));
+    return id;
+  }, []);
+
+  const removeTimer = useCallback((id: string) => {
+    setState((s) => ({
+      ...s,
+      savedTimers: s.savedTimers.filter((t) => t.id !== id),
+    }));
+  }, []);
+
+  const updateTimer = useCallback(
+    (
+      id: string,
+      updates: Partial<Pick<SavedTimer, "title" | "durationMs">>,
+    ) => {
+      setState((s) => ({
+        ...s,
+        savedTimers: s.savedTimers.map((t) =>
+          t.id === id ? { ...t, ...updates } : t,
+        ),
+      }));
+    },
+    [],
+  );
+
+  const incrementStartCount = useCallback((id: string) => {
+    setState((s) => ({
+      ...s,
+      savedTimers: s.savedTimers.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              startCount: t.startCount + 1,
+              lastUsedAt: new Date().toISOString(),
+            }
+          : t,
+      ),
+    }));
+  }, []);
+
+  const resetStartCount = useCallback((id: string) => {
+    setState((s) => ({
+      ...s,
+      savedTimers: s.savedTimers.map((t) =>
+        t.id === id ? { ...t, startCount: 0 } : t,
+      ),
+    }));
+  }, []);
+
+  const addChronometerSession = useCallback(
+    (durationMs: number, startedAt: string) => {
+      setState((s) => ({
+        ...s,
+        chronometerHistory: [
+          {
+            id: generateId(),
+            durationMs,
+            startedAt,
+            endedAt: new Date().toISOString(),
+          },
+          ...s.chronometerHistory,
+        ].slice(0, 10),
+      }));
+    },
+    [],
+  );
+
+  const clearChronometerHistory = useCallback(() => {
+    setState((s) => ({ ...s, chronometerHistory: [] }));
+  }, []);
+
+  const toggleSeeThrough = useCallback(() => {
+    setState((s) => ({ ...s, seeThrough: !s.seeThrough }));
+  }, []);
+
+  const toggleShowStartCount = useCallback(() => {
+    setState((s) => ({ ...s, showStartCount: !s.showStartCount }));
+  }, []);
+
+  const store: TimerStore = {
+    ...state,
+    addTimer,
+    removeTimer,
+    updateTimer,
+    incrementStartCount,
+    resetStartCount,
+    addChronometerSession,
+    clearChronometerHistory,
+    toggleSeeThrough,
+    toggleShowStartCount,
+  };
+
+  return React.createElement(TimerContext.Provider, { value: store }, children);
+}
+
+// ── Hook (drop-in replacement for Zustand's useTimerStore) ──────
+
+export function useTimerStore<T = TimerStore>(
+  selector?: (state: TimerStore) => T,
+): T {
+  const store = useContext(TimerContext);
+  if (!store) {
+    throw new Error("useTimerStore must be used within a TimerProvider");
+  }
+  if (selector) {
+    return selector(store);
+  }
+  return store as unknown as T;
+}
