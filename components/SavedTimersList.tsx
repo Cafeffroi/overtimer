@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   StyleSheet,
   FlatList,
+  Alert,
+  Platform,
 } from 'react-native';
 import { colors, spacing, radii, shadows } from '../utils/theme';
 import { durationLabel } from '../utils/formatTime';
@@ -44,9 +46,32 @@ export function SavedTimersList({ onSelectTimer }: Props) {
         <TouchableOpacity
           style={styles.card}
           onPress={() => onSelectTimer(item)}
-          onLongPress={() => removeTimer(item.id)}
           activeOpacity={0.7}
         >
+          {/* Delete button */}
+          <TouchableOpacity
+            style={styles.deleteBtn}
+            onPress={() => {
+              if (Platform.OS === 'web') {
+                if (window.confirm(`Delete "${item.title}"?`)) {
+                  removeTimer(item.id);
+                }
+              } else {
+                Alert.alert(
+                  'Delete Timer',
+                  `Are you sure you want to delete "${item.title}"?`,
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Delete', style: 'destructive', onPress: () => removeTimer(item.id) },
+                  ]
+                );
+              }
+            }}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Text style={styles.deleteText}>✕</Text>
+          </TouchableOpacity>
+
           <Text style={styles.cardTitle} numberOfLines={1}>
             {item.title}
           </Text>
@@ -58,10 +83,7 @@ export function SavedTimersList({ onSelectTimer }: Props) {
             <View style={styles.countBadge}>
               <Text style={styles.countText}>×{item.startCount}</Text>
               <TouchableOpacity
-                onPress={(e) => {
-                  e.stopPropagation?.();
-                  resetStartCount(item.id);
-                }}
+                onPress={() => resetStartCount(item.id)}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Text style={styles.resetCount}>↺</Text>
@@ -86,13 +108,33 @@ const styles = StyleSheet.create({
     width: 130,
     borderWidth: 1,
     borderColor: colors.surface,
+    position: 'relative',
     ...shadows.card,
+  },
+  deleteBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.danger + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  deleteText: {
+    color: colors.danger,
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 13,
   },
   cardTitle: {
     color: colors.textPrimary,
     fontSize: 14,
     fontWeight: '600',
     marginBottom: spacing.xs,
+    paddingRight: 20, // avoid overlap with delete button
   },
   cardDuration: {
     color: colors.accent,

@@ -15,12 +15,14 @@ import { useTimerStore, SavedTimer } from '../store/timerStore';
 import { CircularProgress } from './CircularProgress';
 import { TimerForm } from './TimerForm';
 import { SavedTimersList } from './SavedTimersList';
+import { FloatingWidget } from './FloatingWidget';
 // import * as Haptics from 'expo-haptics'; // Uncomment after install
 // import { useKeepAwake } from 'expo-keep-awake'; // Uncomment after install
 
 export function CountdownTimer() {
   const [formVisible, setFormVisible] = useState(false);
   const [activeTimerId, setActiveTimerId] = useState<string | null>(null);
+  const [floatVisible, setFloatVisible] = useState(false);
 
   const seeThrough = useTimerStore((s) => s.seeThrough);
   const toggleSeeThrough = useTimerStore((s) => s.toggleSeeThrough);
@@ -28,24 +30,45 @@ export function CountdownTimer() {
   const toggleShowStartCount = useTimerStore((s) => s.toggleShowStartCount);
   const addTimer = useTimerStore((s) => s.addTimer);
   const incrementStartCount = useTimerStore((s) => s.incrementStartCount);
+  const resetStartCount = useTimerStore((s) => s.resetStartCount);
 
   const onFinish = useCallback(() => {
     // Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    // Could also trigger a sound here
   }, []);
 
   const countdown = useCountdown({ onFinish });
-  // useKeepAwake(); // Uncomment — keeps screen on during timer
+  // useKeepAwake();
 
   const handleSelectTimer = (timer: SavedTimer) => {
     countdown.configure(timer.durationMs);
     setActiveTimerId(timer.id);
   };
 
+  /** Fresh start — increments the counter */
   const handleStart = () => {
     countdown.start();
+    setFloatVisible(true);
     if (activeTimerId) {
       incrementStartCount(activeTimerId);
+    }
+  };
+
+  /** Resume from pause — does NOT increment the counter */
+  const handleResume = () => {
+    countdown.start();
+  };
+
+  /** Restart after finished — counts as a new start */
+  const handleRestart = () => {
+    countdown.restart();
+    if (activeTimerId) {
+      incrementStartCount(activeTimerId);
+    }
+  };
+
+  const handleResetCounter = () => {
+    if (activeTimerId) {
+      resetStartCount(activeTimerId);
     }
   };
 
@@ -58,8 +81,12 @@ export function CountdownTimer() {
   const isActive = countdown.status === 'running' || countdown.status === 'paused';
   const isFinished = countdown.status === 'finished';
   const ringColor = isFinished ? colors.ringComplete : colors.ringActive;
-
   const containerOpacity = seeThrough && isActive ? 0.6 : 1;
+
+  // Get current start count for display
+  const savedTimers = useTimerStore((s) => s.savedTimers);
+  const activeTimer = savedTimers.find((t) => t.id === activeTimerId);
+  const currentCount = activeTimer?.startCount ?? 0;
 
   return (
     <View style={[styles.container, { opacity: containerOpacity }]}>
@@ -87,6 +114,19 @@ export function CountdownTimer() {
           </Text>
           {isFinished && <Text style={styles.doneLabel}>Done!</Text>}
         </CircularProgress>
+
+        {/* Start counter badge */}
+        {showStartCount && activeTimerId && currentCount > 0 && (
+          <View style={styles.counterBadge}>
+            <Text style={styles.counterText}>×{currentCount}</Text>
+            <TouchableOpacity
+              onPress={handleResetCounter}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.counterReset}>↺</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* ── Controls ────────────────────────────────────────── */}
@@ -108,7 +148,7 @@ export function CountdownTimer() {
             <TouchableOpacity style={styles.btnSecondary} onPress={countdown.reset}>
               <Text style={styles.btnSecondaryText}>Reset</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.btnPrimary} onPress={handleStart}>
+            <TouchableOpacity style={styles.btnPrimary} onPress={handleResume}>
               <Text style={styles.btnPrimaryText}>Resume</Text>
             </TouchableOpacity>
           </View>
@@ -119,7 +159,7 @@ export function CountdownTimer() {
             <TouchableOpacity style={styles.btnSecondary} onPress={countdown.reset}>
               <Text style={styles.btnSecondaryText}>Reset</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.btnPrimary} onPress={handleStart}>
+            <TouchableOpacity style={styles.btnPrimary} onPress={handleRestart}>
               <Text style={styles.btnPrimaryText}>Restart</Text>
             </TouchableOpacity>
           </View>
@@ -160,6 +200,20 @@ export function CountdownTimer() {
         onClose={() => setFormVisible(false)}
         onSave={handleSaveNew}
       />
+
+      {/* ── Floating Widget ─────────────────────────────────── */}
+      {floatVisible && (countdown.status === 'running' || countdown.status === 'paused' || countdown.status === 'finished') && (
+        <FloatingWidget
+          remainingMs={countdown.remainingMs}
+          isRunning={countdown.status === 'running'}
+          isFinished={countdown.status === 'finished'}
+          seeThrough={seeThrough}
+          onReset={() => countdown.reset()}
+          onRestart={handleRestart}
+          onResetCounter={handleResetCounter}
+          onDismiss={() => setFloatVisible(false)}
+        />
+      )}
     </View>
   );
 }
@@ -209,6 +263,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginTop: spacing.xs,
+  },
+  counterBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    backgroundColor: colors.bgCard,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radii.full,
+  },
+  counterText: {
+    color: colors.secondary,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  counterReset: {
+    color: colors.textDim,
+    fontSize: 18,
   },
   controls: {
     alignItems: 'center',
@@ -264,4 +337,4 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 15,
   },
-});
+}); 

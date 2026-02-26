@@ -1,13 +1,13 @@
 // components/TimerForm.tsx
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   Modal,
+  Platform,
 } from 'react-native';
 import { colors, spacing, radii, shadows } from '../utils/theme';
 import { toMs, durationLabel } from '../utils/formatTime';
@@ -16,7 +16,6 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   onSave: (title: string, durationMs: number) => void;
-  /** If provided, pre-fills the form for editing */
   initial?: { title: string; hours: number; minutes: number; seconds: number };
 }
 
@@ -33,7 +32,6 @@ export function TimerForm({ visible, onClose, onSave, initial }: Props) {
     if (!isValid) return;
     const finalTitle = title.trim() || durationLabel(durationMs);
     onSave(finalTitle, durationMs);
-    // Reset
     setTitle('');
     setHours(0);
     setMinutes(1);
@@ -54,7 +52,6 @@ export function TimerForm({ visible, onClose, onSave, initial }: Props) {
 
           <Text style={styles.heading}>New Timer</Text>
 
-          {/* Title input */}
           <Text style={styles.label}>Title (optional)</Text>
           <TextInput
             style={styles.input}
@@ -65,38 +62,19 @@ export function TimerForm({ visible, onClose, onSave, initial }: Props) {
             maxLength={40}
           />
 
-          {/* Duration pickers */}
           <Text style={styles.label}>Duration</Text>
           <View style={styles.pickerRow}>
-            <NumberPicker
-              value={hours}
-              onChange={setHours}
-              max={23}
-              label="h"
-            />
+            <NumberPicker value={hours} onChange={setHours} max={23} label="h" />
             <Text style={styles.pickerSeparator}>:</Text>
-            <NumberPicker
-              value={minutes}
-              onChange={setMinutes}
-              max={59}
-              label="m"
-            />
+            <NumberPicker value={minutes} onChange={setMinutes} max={59} label="m" />
             <Text style={styles.pickerSeparator}>:</Text>
-            <NumberPicker
-              value={seconds}
-              onChange={setSeconds}
-              max={59}
-              label="s"
-            />
+            <NumberPicker value={seconds} onChange={setSeconds} max={59} label="s" />
           </View>
 
           {isValid && (
-            <Text style={styles.preview}>
-              {durationLabel(durationMs)}
-            </Text>
+            <Text style={styles.preview}>{durationLabel(durationMs)}</Text>
           )}
 
-          {/* Actions */}
           <View style={styles.actions}>
             <TouchableOpacity style={styles.btnCancel} onPress={onClose}>
               <Text style={styles.btnCancelText}>Cancel</Text>
@@ -115,7 +93,7 @@ export function TimerForm({ visible, onClose, onSave, initial }: Props) {
   );
 }
 
-// ── Simple number stepper ───────────────────────────────────────
+// ── NumberPicker: tap to type, arrows to increment ──────────────
 
 function NumberPicker({
   value,
@@ -128,20 +106,64 @@ function NumberPicker({
   max: number;
   label: string;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState('');
+  const inputRef = useRef<TextInput>(null);
+
   const increment = () => onChange(value >= max ? 0 : value + 1);
   const decrement = () => onChange(value <= 0 ? max : value - 1);
+
+  const startEditing = () => {
+    setEditText(value.toString());
+    setEditing(true);
+    // Small delay to ensure the TextInput is mounted before focusing
+    setTimeout(() => inputRef.current?.focus(), 50);
+  };
+
+  const finishEditing = () => {
+    setEditing(false);
+    const parsed = parseInt(editText, 10);
+    if (!isNaN(parsed)) {
+      onChange(Math.max(0, Math.min(max, parsed)));
+    }
+  };
 
   return (
     <View style={styles.picker}>
       <TouchableOpacity onPress={increment} style={styles.pickerBtn}>
         <Text style={styles.pickerArrow}>▲</Text>
       </TouchableOpacity>
-      <View style={styles.pickerValue}>
-        <Text style={styles.pickerNumber}>
-          {value.toString().padStart(2, '0')}
-        </Text>
+
+      <TouchableOpacity
+        style={styles.pickerValue}
+        onPress={startEditing}
+        activeOpacity={0.7}
+      >
+        {editing ? (
+          <TextInput
+            ref={inputRef}
+            style={styles.pickerInput}
+            value={editText}
+            onChangeText={(text) => {
+              // Allow only digits
+              const clean = text.replace(/[^0-9]/g, '');
+              setEditText(clean);
+            }}
+            onBlur={finishEditing}
+            onSubmitEditing={finishEditing}
+            keyboardType="number-pad"
+            maxLength={2}
+            selectTextOnFocus
+            returnKeyType="done"
+          />
+        ) : (
+          <Text style={styles.pickerNumber}>
+            {value.toString().padStart(2, '0')}
+          </Text>
+        )}
         <Text style={styles.pickerLabel}>{label}</Text>
-      </View>
+      </TouchableOpacity>
+
       <TouchableOpacity onPress={decrement} style={styles.pickerBtn}>
         <Text style={styles.pickerArrow}>▼</Text>
       </TouchableOpacity>
@@ -226,6 +248,20 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
+  },
+  pickerInput: {
+    color: colors.textPrimary,
+    fontSize: 28,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+    textAlign: 'center',
+    padding: 0,
+    width: 40,
+    // Remove underline on Android
+    ...Platform.select({
+      android: { textDecorationLine: 'none' },
+      web: { outlineStyle: 'none' } as any,
+    }),
   },
   pickerLabel: {
     color: colors.textDim,
