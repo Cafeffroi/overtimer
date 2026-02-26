@@ -4,7 +4,7 @@
     "slug": "OverTimer",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/overtimer_icon.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "scheme": "floattimer",
     "splash": {
@@ -14,7 +14,8 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.yourname.floattimer",
       "infoPlist": {
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": ["audio"],
+        "NSUserTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you."
       }
     },
     "android": {
@@ -24,6 +25,27 @@
       "package": "com.yourname.floattimer",
       "permissions": ["SYSTEM_ALERT_WINDOW", "FOREGROUND_SERVICE", "VIBRATE"]
     },
-    "plugins": ["expo-router"]
+    "plugins": [
+      "expo-router",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-xxxxxxxx~xxxxxxxx",
+          "iosAppId": "ca-app-pub-xxxxxxxx~xxxxxxxx"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ]
+    ]
+  },
+  "react-native-google-mobile-ads": {
+    "android_app_id": "ca-app-pub-xxxxxxxx~xxxxxxxx",
+    "ios_app_id": "ca-app-pub-xxxxxxxx~xxxxxxxx"
   }
 }
