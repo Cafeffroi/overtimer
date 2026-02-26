@@ -16,6 +16,7 @@ import { CircularProgress } from './CircularProgress';
 import { TimerForm } from './TimerForm';
 import { SavedTimersList } from './SavedTimersList';
 import { FloatingWidget } from './FloatingWidget';
+import { QuickTimePicker } from './QuickTimePicker';
 // import * as Haptics from 'expo-haptics'; // Uncomment after install
 // import { useKeepAwake } from 'expo-keep-awake'; // Uncomment after install
 
@@ -78,6 +79,13 @@ export function CountdownTimer() {
     setActiveTimerId(id);
   };
 
+  /** Quick one-time start without saving */
+  const handleQuickStart = (durationMs: number) => {
+    setActiveTimerId(null);
+    countdown.startWith(durationMs);
+    setFloatVisible(true);
+  };
+
   const isActive = countdown.status === 'running' || countdown.status === 'paused';
   const isFinished = countdown.status === 'finished';
   const ringColor = isFinished ? colors.ringComplete : colors.ringActive;
@@ -90,17 +98,6 @@ export function CountdownTimer() {
 
   return (
     <View style={[styles.container, { opacity: containerOpacity }]}>
-      {/* ── Saved Timers ────────────────────────────────────── */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Saved Timers</Text>
-          <TouchableOpacity onPress={() => setFormVisible(true)}>
-            <Text style={styles.addBtn}>+ New</Text>
-          </TouchableOpacity>
-        </View>
-        <SavedTimersList onSelectTimer={handleSelectTimer} />
-      </View>
-
       {/* ── Timer Display ───────────────────────────────────── */}
       <View style={styles.timerArea}>
         <CircularProgress
@@ -115,18 +112,20 @@ export function CountdownTimer() {
           {isFinished && <Text style={styles.doneLabel}>Done!</Text>}
         </CircularProgress>
 
-        {/* Start counter badge */}
-        {showStartCount && activeTimerId && currentCount > 0 && (
-          <View style={styles.counterBadge}>
-            <Text style={styles.counterText}>×{currentCount}</Text>
-            <TouchableOpacity
-              onPress={handleResetCounter}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={styles.counterReset}>↺</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* Start counter badge — fixed height container */}
+        <View style={styles.counterContainer}>
+          {showStartCount && activeTimerId && currentCount > 0 && (
+            <View style={styles.counterBadge}>
+              <Text style={styles.counterText}>×{currentCount}</Text>
+              <TouchableOpacity
+                onPress={handleResetCounter}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={styles.counterReset}>↺</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
       </View>
 
       {/* ── Controls ────────────────────────────────────────── */}
@@ -144,31 +143,39 @@ export function CountdownTimer() {
         )}
 
         {countdown.status === 'paused' && (
-          <View style={styles.controlRow}>
-            <TouchableOpacity style={styles.btnSecondary} onPress={countdown.reset}>
-              <Text style={styles.btnSecondaryText}>Reset</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.btnPrimary} onPress={handleResume}>
-              <Text style={styles.btnPrimaryText}>Resume</Text>
+          <View style={styles.controlGroup}>
+            <View style={styles.controlRow}>
+              <TouchableOpacity style={styles.btnSecondary} onPress={countdown.reset}>
+                <Text style={styles.btnSecondaryText}>Reset</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.btnPrimary} onPress={handleResume}>
+                <Text style={styles.btnPrimaryText}>Resume</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity onPress={() => { countdown.clear(); setActiveTimerId(null); setFloatVisible(false); }}>
+              <Text style={styles.newTimerLink}>New timer...</Text>
             </TouchableOpacity>
           </View>
         )}
 
         {isFinished && (
-          <View style={styles.controlRow}>
-            <TouchableOpacity style={styles.btnSecondary} onPress={countdown.reset}>
-              <Text style={styles.btnSecondaryText}>Reset</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.btnPrimary} onPress={handleRestart}>
-              <Text style={styles.btnPrimaryText}>Restart</Text>
+          <View style={styles.controlGroup}>
+            <View style={styles.controlRow}>
+              <TouchableOpacity style={styles.btnSecondary} onPress={countdown.reset}>
+                <Text style={styles.btnSecondaryText}>Reset</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.btnPrimary} onPress={handleRestart}>
+                <Text style={styles.btnPrimaryText}>Restart</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity onPress={() => { countdown.clear(); setActiveTimerId(null); setFloatVisible(false); }}>
+              <Text style={styles.newTimerLink}>New timer...</Text>
             </TouchableOpacity>
           </View>
         )}
 
         {countdown.totalMs === 0 && (
-          <Text style={styles.hint}>
-            Select a saved timer or create a new one
-          </Text>
+          <QuickTimePicker onStart={handleQuickStart} />
         )}
       </View>
 
@@ -192,6 +199,17 @@ export function CountdownTimer() {
             thumbColor={showStartCount ? colors.secondary : colors.textDim}
           />
         </View>
+      </View>
+
+      {/* ── Saved Timers ────────────────────────────────────── */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Saved Timers</Text>
+          <TouchableOpacity onPress={() => setFormVisible(true)}>
+            <Text style={styles.addBtn}>+ New</Text>
+          </TouchableOpacity>
+        </View>
+        <SavedTimersList onSelectTimer={handleSelectTimer} />
       </View>
 
       {/* ── Timer Form Modal ────────────────────────────────── */}
@@ -225,6 +243,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   section: {
+    marginTop: spacing.lg,
     marginBottom: spacing.md,
   },
   sectionHeader: {
@@ -232,7 +251,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   sectionTitle: {
     color: colors.textSecondary,
@@ -249,7 +268,8 @@ const styles = StyleSheet.create({
   timerArea: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing.xl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xs,
   },
   time: {
     color: colors.textPrimary,
@@ -264,11 +284,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: spacing.xs,
   },
+  counterContainer: {
+    height: 36,
+    marginTop: spacing.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   counterBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    marginTop: spacing.md,
     backgroundColor: colors.bgCard,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
@@ -285,12 +310,23 @@ const styles = StyleSheet.create({
   },
   controls: {
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.lg,
+    minHeight: 120,
   },
   controlRow: {
     flexDirection: 'row',
     gap: spacing.md,
+  },
+  controlGroup: {
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  newTimerLink: {
+    color: colors.textDim,
+    fontSize: 13,
+    textDecorationLine: 'underline',
   },
   btnPrimary: {
     backgroundColor: colors.accent,
@@ -315,11 +351,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
-  hint: {
-    color: colors.textDim,
-    fontSize: 14,
-    textAlign: 'center',
-  },
   options: {
     paddingHorizontal: spacing.lg,
     gap: spacing.sm,
@@ -337,4 +368,4 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 15,
   },
-}); 
+});

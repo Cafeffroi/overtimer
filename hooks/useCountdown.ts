@@ -71,6 +71,15 @@ export function useCountdown(options?: UseCountdownOptions) {
     setStatus("idle");
   }, [clearTimer]);
 
+  /** Clear everything — go back to unconfigured state */
+  const clear = useCallback(() => {
+    clearTimer();
+    totalMsRef.current = 0;
+    setTotalMs(0);
+    setRemainingMs(0);
+    setStatus("idle");
+  }, [clearTimer]);
+
   /** Restart — reset + start immediately in one call */
   const restart = useCallback(() => {
     clearTimer();
@@ -80,6 +89,20 @@ export function useCountdown(options?: UseCountdownOptions) {
     setStatus("running");
     intervalRef.current = setInterval(tick, 50);
   }, [clearTimer, tick]);
+
+  /** Configure + start in one call (for quick one-time timers) */
+  const startWith = useCallback(
+    (ms: number) => {
+      clearTimer();
+      totalMsRef.current = ms;
+      setTotalMs(ms);
+      setRemainingMs(ms);
+      endTimeRef.current = Date.now() + ms;
+      setStatus("running");
+      intervalRef.current = setInterval(tick, 50);
+    },
+    [clearTimer, tick],
+  );
 
   const progress = totalMs > 0 ? 1 - remainingMs / totalMs : 0;
 
@@ -94,6 +117,8 @@ export function useCountdown(options?: UseCountdownOptions) {
     start,
     pause,
     reset,
+    clear,
     restart,
+    startWith,
   };
 }
