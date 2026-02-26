@@ -4,7 +4,7 @@
     "slug": "OverTimer",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/overtimer_icon.png",
     "userInterfaceStyle": "dark",
     "scheme": "floattimer",
     "splash": {
@@ -24,8 +24,6 @@
       "package": "com.yourname.floattimer",
       "permissions": ["SYSTEM_ALERT_WINDOW", "FOREGROUND_SERVICE", "VIBRATE"]
     },
-    "plugins": [
-      "expo-router"
-    ]
+    "plugins": ["expo-router"]
   }
 }
